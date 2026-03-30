@@ -411,6 +411,107 @@ func TestExtractSendsPDFContentType(t *testing.T) {
 	}
 }
 
+func TestSignSendsCorrectBody(t *testing.T) {
+	var gotBody []byte
+	var gotPath, gotContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("%PDF-signed"))
+	}))
+	defer server.Close()
+
+	client := New("forme_sk_test", WithBaseURL(server.URL))
+	result, err := client.Sign(
+		[]byte("%PDF-original"),
+		"-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----",
+		"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+		SignOptions{Reason: "Approved", Location: "NYC", Contact: "test@example.com"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(result) != "%PDF-signed" {
+		t.Fatalf("expected signed PDF, got %q", result)
+	}
+	if gotPath != "/v1/sign" {
+		t.Fatalf("expected '/v1/sign', got %q", gotPath)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("expected 'application/json', got %q", gotContentType)
+	}
+
+	var body map[string]string
+	json.Unmarshal(gotBody, &body)
+	if body["certificatePem"] != "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----" {
+		t.Fatalf("unexpected certificatePem: %q", body["certificatePem"])
+	}
+	if body["privateKeyPem"] != "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----" {
+		t.Fatalf("unexpected privateKeyPem: %q", body["privateKeyPem"])
+	}
+	if body["reason"] != "Approved" {
+		t.Fatalf("expected reason=Approved, got %q", body["reason"])
+	}
+	if body["location"] != "NYC" {
+		t.Fatalf("expected location=NYC, got %q", body["location"])
+	}
+	if body["contact"] != "test@example.com" {
+		t.Fatalf("expected contact=test@example.com, got %q", body["contact"])
+	}
+	if body["pdf"] == "" {
+		t.Fatal("expected pdf to be base64-encoded")
+	}
+}
+
+func TestSignReturnsFormeErrorOnError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid certificate"})
+	}))
+	defer server.Close()
+
+	client := New("forme_sk_test", WithBaseURL(server.URL))
+	_, err := client.Sign([]byte("%PDF"), "bad-cert", "bad-key", SignOptions{})
+
+	fErr, ok := err.(*FormeError)
+	if !ok {
+		t.Fatalf("expected *FormeError, got %T", err)
+	}
+	if fErr.Status != 400 {
+		t.Fatalf("expected status 400, got %d", fErr.Status)
+	}
+	if fErr.Message != "Invalid certificate" {
+		t.Fatalf("expected 'Invalid certificate', got %q", fErr.Message)
+	}
+}
+
+func TestSignOmitsEmptyOptions(t *testing.T) {
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("%PDF"))
+	}))
+	defer server.Close()
+
+	client := New("forme_sk_test", WithBaseURL(server.URL))
+	client.Sign([]byte("%PDF"), "cert", "key", SignOptions{})
+
+	var body map[string]string
+	json.Unmarshal(gotBody, &body)
+	if _, ok := body["reason"]; ok {
+		t.Fatal("expected reason to be omitted when empty")
+	}
+	if _, ok := body["location"]; ok {
+		t.Fatal("expected location to be omitted when empty")
+	}
+	if _, ok := body["contact"]; ok {
+		t.Fatal("expected contact to be omitted when empty")
+	}
+}
+
 func TestWithBaseURLIsRespected(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")

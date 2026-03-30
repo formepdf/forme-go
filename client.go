@@ -2,6 +2,7 @@ package forme
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -90,6 +91,31 @@ func (f *Forme) GetJob(jobID string) (*JobResult, error) {
 		return nil, fmt.Errorf("failed to parse job response: %w", err)
 	}
 	return &result, nil
+}
+
+// Sign applies a PKCS#7 digital signature to a PDF.
+// Returns the signed PDF bytes.
+func (f *Forme) Sign(pdfBytes []byte, certificatePem, privateKeyPem string, opts SignOptions) ([]byte, error) {
+	body := map[string]string{
+		"pdf":            base64.StdEncoding.EncodeToString(pdfBytes),
+		"certificatePem": certificatePem,
+		"privateKeyPem":  privateKeyPem,
+	}
+	if opts.Reason != "" {
+		body["reason"] = opts.Reason
+	}
+	if opts.Location != "" {
+		body["location"] = opts.Location
+	}
+	if opts.Contact != "" {
+		body["contact"] = opts.Contact
+	}
+
+	respBody, _, err := f.doJSON("POST", "/v1/sign", body)
+	if err != nil {
+		return nil, err
+	}
+	return respBody, nil
 }
 
 // Merge combines multiple PDFs into a single PDF via multipart upload.

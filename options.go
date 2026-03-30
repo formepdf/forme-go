@@ -32,6 +32,13 @@ type AsyncResult struct {
 	Status string `json:"status"`
 }
 
+// SignOptions configures a sign request.
+type SignOptions struct {
+	Reason   string `json:"reason,omitempty"`
+	Location string `json:"location,omitempty"`
+	Contact  string `json:"contact,omitempty"`
+}
+
 // JobResult is returned from GetJob.
 type JobResult struct {
 	ID        string `json:"id"`

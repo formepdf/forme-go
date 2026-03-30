@@ -862,14 +862,18 @@ type Column struct {
 
 // DocumentNode is the root document node.
 type DocumentNode struct {
-	children []Node
-	title    string
-	author   string
-	subject  string
-	lang     string
-	style    *Style
-	fonts    []map[string]any
-	tagged   bool
+	children     []Node
+	title        string
+	author       string
+	subject      string
+	lang         string
+	style        *Style
+	fonts        []map[string]any
+	tagged       bool
+	pdfa         string
+	pdfUa        bool
+	flattenForms bool
+	signature    map[string]any
 }
 
 // Document creates a new document node.
@@ -884,6 +888,13 @@ func (d *DocumentNode) Lang(lang string) *DocumentNode         { d.lang = lang; 
 func (d *DocumentNode) DefaultStyle(s Style) *DocumentNode     { d.style = &s; return d }
 func (d *DocumentNode) Fonts(fonts []map[string]any) *DocumentNode { d.fonts = fonts; return d }
 func (d *DocumentNode) Tagged(tagged bool) *DocumentNode       { d.tagged = tagged; return d }
+func (d *DocumentNode) PdfA(level string) *DocumentNode        { d.pdfa = level; return d }
+func (d *DocumentNode) PdfUA() *DocumentNode                   { d.pdfUa = true; return d }
+func (d *DocumentNode) FlattenForms() *DocumentNode            { d.flattenForms = true; return d }
+func (d *DocumentNode) SetSignature(config map[string]any) *DocumentNode {
+	d.signature = config
+	return d
+}
 
 func (d *DocumentNode) toDict() map[string]any {
 	doc := map[string]any{
@@ -916,6 +927,15 @@ func (d *DocumentNode) toDict() map[string]any {
 	if d.tagged {
 		doc["tagged"] = true
 	}
+	if d.pdfa != "" {
+		doc["pdfa"] = d.pdfa
+	}
+	if d.pdfUa {
+		doc["pdfUa"] = true
+	}
+	if d.signature != nil {
+		doc["signature"] = d.signature
+	}
 
 	return doc
 }
@@ -932,6 +952,9 @@ func (d *DocumentNode) ToJSON() (string, error) {
 // Render renders the document to PDF bytes using the local WASM engine.
 func (d *DocumentNode) Render(embedData ...any) ([]byte, error) {
 	doc := d.toDict()
+	if d.flattenForms {
+		doc["flattenForms"] = true
+	}
 	if len(embedData) > 0 && embedData[0] != nil {
 		data, err := json.Marshal(embedData[0])
 		if err != nil {
@@ -1622,6 +1645,185 @@ func (d *DotPlotNode) toDict() map[string]any {
 	return map[string]any{
 		"kind":     kind,
 		"style":    mapStyle(d.style),
+		"children": []any{},
+	}
+}
+
+// ── Form Fields ─────────────────────────────────────────────────────
+
+// TextFieldNode is an interactive text input field (PDF AcroForm widget).
+type TextFieldNode struct {
+	name        string
+	value       *string
+	placeholder *string
+	width       float64
+	height      float64
+	multiline   bool
+	password    bool
+	readOnly    bool
+	maxLength   *int
+	fontSize    float64
+	style       *Style
+}
+
+// TextField creates a new text field node.
+func TextField(name string) *TextFieldNode {
+	return &TextFieldNode{name: name, width: 200, height: 24, fontSize: 12}
+}
+
+func (t *TextFieldNode) Value(v string) *TextFieldNode       { t.value = &v; return t }
+func (t *TextFieldNode) Placeholder(p string) *TextFieldNode  { t.placeholder = &p; return t }
+func (t *TextFieldNode) Width(w float64) *TextFieldNode       { t.width = w; return t }
+func (t *TextFieldNode) Height(h float64) *TextFieldNode      { t.height = h; return t }
+func (t *TextFieldNode) Multiline(m bool) *TextFieldNode      { t.multiline = m; return t }
+func (t *TextFieldNode) Password(p bool) *TextFieldNode       { t.password = p; return t }
+func (t *TextFieldNode) ReadOnly(r bool) *TextFieldNode       { t.readOnly = r; return t }
+func (t *TextFieldNode) MaxLength(n int) *TextFieldNode       { t.maxLength = &n; return t }
+func (t *TextFieldNode) FontSize(s float64) *TextFieldNode    { t.fontSize = s; return t }
+func (t *TextFieldNode) Style(s Style) *TextFieldNode         { t.style = &s; return t }
+
+func (t *TextFieldNode) toDict() map[string]any {
+	kind := map[string]any{
+		"type":      "TextField",
+		"name":      t.name,
+		"width":     t.width,
+		"height":    t.height,
+		"multiline": t.multiline,
+		"password":  t.password,
+		"read_only": t.readOnly,
+		"font_size": t.fontSize,
+	}
+	if t.value != nil {
+		kind["value"] = *t.value
+	}
+	if t.placeholder != nil {
+		kind["placeholder"] = *t.placeholder
+	}
+	if t.maxLength != nil {
+		kind["max_length"] = *t.maxLength
+	}
+	return map[string]any{
+		"kind":     kind,
+		"style":    mapStyle(t.style),
+		"children": []any{},
+	}
+}
+
+// CheckboxNode is an interactive checkbox (PDF AcroForm widget).
+type CheckboxNode struct {
+	name     string
+	checked  bool
+	width    float64
+	height   float64
+	readOnly bool
+	style    *Style
+}
+
+// Checkbox creates a new checkbox node.
+func Checkbox(name string) *CheckboxNode {
+	return &CheckboxNode{name: name, width: 14, height: 14}
+}
+
+func (c *CheckboxNode) Checked(v bool) *CheckboxNode    { c.checked = v; return c }
+func (c *CheckboxNode) Width(w float64) *CheckboxNode   { c.width = w; return c }
+func (c *CheckboxNode) Height(h float64) *CheckboxNode  { c.height = h; return c }
+func (c *CheckboxNode) ReadOnly(r bool) *CheckboxNode   { c.readOnly = r; return c }
+func (c *CheckboxNode) Style(s Style) *CheckboxNode     { c.style = &s; return c }
+
+func (c *CheckboxNode) toDict() map[string]any {
+	return map[string]any{
+		"kind": map[string]any{
+			"type":      "Checkbox",
+			"name":      c.name,
+			"checked":   c.checked,
+			"width":     c.width,
+			"height":    c.height,
+			"read_only": c.readOnly,
+		},
+		"style":    mapStyle(c.style),
+		"children": []any{},
+	}
+}
+
+// DropdownNode is an interactive dropdown / combo box (PDF AcroForm widget).
+type DropdownNode struct {
+	name     string
+	options  []string
+	value    *string
+	width    float64
+	height   float64
+	readOnly bool
+	fontSize float64
+	style    *Style
+}
+
+// Dropdown creates a new dropdown node.
+func Dropdown(name string, options []string) *DropdownNode {
+	return &DropdownNode{name: name, options: options, width: 200, height: 24, fontSize: 12}
+}
+
+func (d *DropdownNode) Value(v string) *DropdownNode     { d.value = &v; return d }
+func (d *DropdownNode) Width(w float64) *DropdownNode    { d.width = w; return d }
+func (d *DropdownNode) Height(h float64) *DropdownNode   { d.height = h; return d }
+func (d *DropdownNode) ReadOnly(r bool) *DropdownNode    { d.readOnly = r; return d }
+func (d *DropdownNode) FontSize(s float64) *DropdownNode { d.fontSize = s; return d }
+func (d *DropdownNode) Style(s Style) *DropdownNode      { d.style = &s; return d }
+
+func (d *DropdownNode) toDict() map[string]any {
+	kind := map[string]any{
+		"type":      "Dropdown",
+		"name":      d.name,
+		"options":   d.options,
+		"width":     d.width,
+		"height":    d.height,
+		"read_only": d.readOnly,
+		"font_size": d.fontSize,
+	}
+	if d.value != nil {
+		kind["value"] = *d.value
+	}
+	return map[string]any{
+		"kind":     kind,
+		"style":    mapStyle(d.style),
+		"children": []any{},
+	}
+}
+
+// RadioButtonNode is an interactive radio button (PDF AcroForm widget).
+// Multiple RadioButtons with the same name form a mutually exclusive group.
+type RadioButtonNode struct {
+	name     string
+	value    string
+	checked  bool
+	width    float64
+	height   float64
+	readOnly bool
+	style    *Style
+}
+
+// RadioButton creates a new radio button node.
+func RadioButton(name string, value string) *RadioButtonNode {
+	return &RadioButtonNode{name: name, value: value, width: 14, height: 14}
+}
+
+func (r *RadioButtonNode) Checked(v bool) *RadioButtonNode   { r.checked = v; return r }
+func (r *RadioButtonNode) Width(w float64) *RadioButtonNode  { r.width = w; return r }
+func (r *RadioButtonNode) Height(h float64) *RadioButtonNode { r.height = h; return r }
+func (r *RadioButtonNode) ReadOnly(v bool) *RadioButtonNode  { r.readOnly = v; return r }
+func (r *RadioButtonNode) Style(s Style) *RadioButtonNode    { r.style = &s; return r }
+
+func (r *RadioButtonNode) toDict() map[string]any {
+	return map[string]any{
+		"kind": map[string]any{
+			"type":      "RadioButton",
+			"name":      r.name,
+			"value":     r.value,
+			"checked":   r.checked,
+			"width":     r.width,
+			"height":    r.height,
+			"read_only": r.readOnly,
+		},
+		"style":    mapStyle(r.style),
 		"children": []any{},
 	}
 }

@@ -1,6 +1,7 @@
 package forme
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -597,6 +598,130 @@ func TestRenderS3ReturnsURL(t *testing.T) {
 	}
 	if result.URL != "https://s3.example.com/invoice.pdf" {
 		t.Fatalf("expected S3 URL, got %q", result.URL)
+	}
+}
+
+func TestRedactSendsCorrectBody(t *testing.T) {
+	var gotBody []byte
+	var gotPath, gotContentType string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotContentType = r.Header.Get("Content-Type")
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("%PDF-redacted"))
+	}))
+	defer server.Close()
+
+	client := New("forme_sk_test", WithBaseURL(server.URL))
+	page := 2
+	result, err := client.Redact(
+		[]byte("%PDF-original"),
+		RedactOptions{
+			Patterns: []RedactionPattern{
+				{Pattern: `\d{3}-\d{2}-\d{4}`, PatternType: "Regex", Color: "#000000"},
+				{Pattern: "John Doe", PatternType: "Literal", Page: &page},
+			},
+			Presets: []string{"ssn", "email"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(result) != "%PDF-redacted" {
+		t.Fatalf("expected redacted PDF, got %q", result)
+	}
+	if gotPath != "/v1/redact" {
+		t.Fatalf("expected '/v1/redact', got %q", gotPath)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("expected 'application/json', got %q", gotContentType)
+	}
+
+	var body map[string]any
+	json.Unmarshal(gotBody, &body)
+	if body["pdf"] == "" {
+		t.Fatal("expected pdf to be base64-encoded")
+	}
+
+	patterns, ok := body["patterns"].([]any)
+	if !ok || len(patterns) != 2 {
+		t.Fatalf("expected 2 patterns, got %v", body["patterns"])
+	}
+	p0 := patterns[0].(map[string]any)
+	if p0["pattern"] != `\d{3}-\d{2}-\d{4}` {
+		t.Fatalf("unexpected pattern: %v", p0["pattern"])
+	}
+	if p0["pattern_type"] != "Regex" {
+		t.Fatalf("unexpected pattern_type: %v", p0["pattern_type"])
+	}
+	p1 := patterns[1].(map[string]any)
+	if p1["page"] != float64(2) {
+		t.Fatalf("expected page=2, got %v", p1["page"])
+	}
+
+	presets, ok := body["presets"].([]any)
+	if !ok || len(presets) != 2 {
+		t.Fatalf("expected 2 presets, got %v", body["presets"])
+	}
+	if presets[0] != "ssn" || presets[1] != "email" {
+		t.Fatalf("unexpected presets: %v", presets)
+	}
+
+	if _, ok := body["redactions"]; ok {
+		t.Fatal("expected redactions to be omitted when empty")
+	}
+	if _, ok := body["template"]; ok {
+		t.Fatal("expected template to be omitted when empty")
+	}
+}
+
+func TestRasterizeReturnsPages(t *testing.T) {
+	page1 := []byte("PNG-page-1-data")
+	page2 := []byte("PNG-page-2-data")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify path and method
+		if r.URL.Path != "/v1/rasterize" {
+			t.Errorf("expected '/v1/rasterize', got %q", r.URL.Path)
+		}
+		if r.Method != "POST" {
+			t.Errorf("expected POST, got %q", r.Method)
+		}
+
+		// Verify DPI is sent
+		body, _ := io.ReadAll(r.Body)
+		var reqBody map[string]any
+		json.Unmarshal(body, &reqBody)
+		if reqBody["dpi"] != float64(300) {
+			t.Errorf("expected dpi=300, got %v", reqBody["dpi"])
+		}
+		if reqBody["pdf"] == "" {
+			t.Error("expected pdf to be base64-encoded")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"pages": []string{
+				base64.StdEncoding.EncodeToString(page1),
+				base64.StdEncoding.EncodeToString(page2),
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := New("forme_sk_test", WithBaseURL(server.URL))
+	pages, err := client.Rasterize([]byte("%PDF-original"), RasterizeOptions{DPI: 300})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("expected 2 pages, got %d", len(pages))
+	}
+	if string(pages[0]) != "PNG-page-1-data" {
+		t.Fatalf("expected page 1 data, got %q", pages[0])
+	}
+	if string(pages[1]) != "PNG-page-2-data" {
+		t.Fatalf("expected page 2 data, got %q", pages[1])
 	}
 }
 

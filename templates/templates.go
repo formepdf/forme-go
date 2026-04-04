@@ -896,11 +896,6 @@ func (d *DocumentNode) SetCertification(config map[string]any) *DocumentNode {
 	return d
 }
 
-// SetSignature is deprecated. Use SetCertification instead.
-func (d *DocumentNode) SetSignature(config map[string]any) *DocumentNode {
-	return d.SetCertification(config)
-}
-
 func (d *DocumentNode) toDict() map[string]any {
 	doc := map[string]any{
 		"children": nodesToDicts(d.children),

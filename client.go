@@ -118,9 +118,63 @@ func (f *Forme) Certify(pdfBytes []byte, certificatePem, privateKeyPem string, o
 	return respBody, nil
 }
 
-// Sign is deprecated. Use Certify instead.
-func (f *Forme) Sign(pdfBytes []byte, certificatePem, privateKeyPem string, opts CertifyOptions) ([]byte, error) {
-	return f.Certify(pdfBytes, certificatePem, privateKeyPem, opts)
+// Redact removes sensitive content from a PDF.
+// Returns the redacted PDF bytes.
+func (f *Forme) Redact(pdfBytes []byte, opts RedactOptions) ([]byte, error) {
+	body := map[string]any{
+		"pdf": base64.StdEncoding.EncodeToString(pdfBytes),
+	}
+	if len(opts.Redactions) > 0 {
+		body["redactions"] = opts.Redactions
+	}
+	if len(opts.Patterns) > 0 {
+		body["patterns"] = opts.Patterns
+	}
+	if len(opts.Presets) > 0 {
+		body["presets"] = opts.Presets
+	}
+	if opts.Template != "" {
+		body["template"] = opts.Template
+	}
+
+	respBody, _, err := f.doJSON("POST", "/v1/redact", body)
+	if err != nil {
+		return nil, err
+	}
+	return respBody, nil
+}
+
+// Rasterize converts PDF pages to PNG images.
+// Returns a list of PNG image bytes, one per page.
+func (f *Forme) Rasterize(pdfBytes []byte, opts RasterizeOptions) ([][]byte, error) {
+	body := map[string]any{
+		"pdf": base64.StdEncoding.EncodeToString(pdfBytes),
+	}
+	if opts.DPI > 0 {
+		body["dpi"] = opts.DPI
+	}
+
+	respBody, _, err := f.doJSON("POST", "/v1/rasterize", body)
+	if err != nil {
+		return nil, err
+	}
+
+	var envelope struct {
+		Pages []string `json:"pages"`
+	}
+	if err := json.Unmarshal(respBody, &envelope); err != nil {
+		return nil, fmt.Errorf("failed to parse rasterize response: %w", err)
+	}
+
+	pages := make([][]byte, len(envelope.Pages))
+	for i, page := range envelope.Pages {
+		decoded, err := base64.StdEncoding.DecodeString(page)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode page %d: %w", i, err)
+		}
+		pages[i] = decoded
+	}
+	return pages, nil
 }
 
 // Merge combines multiple PDFs into a single PDF via multipart upload.

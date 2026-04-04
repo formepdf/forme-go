@@ -411,7 +411,7 @@ func TestExtractSendsPDFContentType(t *testing.T) {
 	}
 }
 
-func TestSignSendsCorrectBody(t *testing.T) {
+func TestCertifySendsCorrectBody(t *testing.T) {
 	var gotBody []byte
 	var gotPath, gotContentType string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -419,25 +419,25 @@ func TestSignSendsCorrectBody(t *testing.T) {
 		gotContentType = r.Header.Get("Content-Type")
 		gotBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Write([]byte("%PDF-signed"))
+		w.Write([]byte("%PDF-certified"))
 	}))
 	defer server.Close()
 
 	client := New("forme_sk_test", WithBaseURL(server.URL))
-	result, err := client.Sign(
+	result, err := client.Certify(
 		[]byte("%PDF-original"),
 		"-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----",
 		"-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
-		SignOptions{Reason: "Approved", Location: "NYC", Contact: "test@example.com"},
+		CertifyOptions{Reason: "Approved", Location: "NYC", Contact: "test@example.com"},
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if string(result) != "%PDF-signed" {
-		t.Fatalf("expected signed PDF, got %q", result)
+	if string(result) != "%PDF-certified" {
+		t.Fatalf("expected certified PDF, got %q", result)
 	}
-	if gotPath != "/v1/sign" {
-		t.Fatalf("expected '/v1/sign', got %q", gotPath)
+	if gotPath != "/v1/certify" {
+		t.Fatalf("expected '/v1/certify', got %q", gotPath)
 	}
 	if gotContentType != "application/json" {
 		t.Fatalf("expected 'application/json', got %q", gotContentType)
@@ -465,7 +465,7 @@ func TestSignSendsCorrectBody(t *testing.T) {
 	}
 }
 
-func TestSignReturnsFormeErrorOnError(t *testing.T) {
+func TestCertifyReturnsFormeErrorOnError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid certificate"})
@@ -473,7 +473,7 @@ func TestSignReturnsFormeErrorOnError(t *testing.T) {
 	defer server.Close()
 
 	client := New("forme_sk_test", WithBaseURL(server.URL))
-	_, err := client.Sign([]byte("%PDF"), "bad-cert", "bad-key", SignOptions{})
+	_, err := client.Certify([]byte("%PDF"), "bad-cert", "bad-key", CertifyOptions{})
 
 	fErr, ok := err.(*FormeError)
 	if !ok {
@@ -487,7 +487,7 @@ func TestSignReturnsFormeErrorOnError(t *testing.T) {
 	}
 }
 
-func TestSignOmitsEmptyOptions(t *testing.T) {
+func TestCertifyOmitsEmptyOptions(t *testing.T) {
 	var gotBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotBody, _ = io.ReadAll(r.Body)
@@ -497,7 +497,7 @@ func TestSignOmitsEmptyOptions(t *testing.T) {
 	defer server.Close()
 
 	client := New("forme_sk_test", WithBaseURL(server.URL))
-	client.Sign([]byte("%PDF"), "cert", "key", SignOptions{})
+	client.Certify([]byte("%PDF"), "cert", "key", CertifyOptions{})
 
 	var body map[string]string
 	json.Unmarshal(gotBody, &body)

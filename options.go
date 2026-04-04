@@ -32,12 +32,15 @@ type AsyncResult struct {
 	Status string `json:"status"`
 }
 
-// SignOptions configures a sign request.
-type SignOptions struct {
+// CertifyOptions configures a certify request.
+type CertifyOptions struct {
 	Reason   string `json:"reason,omitempty"`
 	Location string `json:"location,omitempty"`
 	Contact  string `json:"contact,omitempty"`
 }
+
+// SignOptions is deprecated. Use CertifyOptions instead.
+type SignOptions = CertifyOptions
 
 // JobResult is returned from GetJob.
 type JobResult struct {

@@ -93,9 +93,9 @@ func (f *Forme) GetJob(jobID string) (*JobResult, error) {
 	return &result, nil
 }
 
-// Sign applies a PKCS#7 digital signature to a PDF.
-// Returns the signed PDF bytes.
-func (f *Forme) Sign(pdfBytes []byte, certificatePem, privateKeyPem string, opts SignOptions) ([]byte, error) {
+// Certify applies a PKCS#7 digital certification to a PDF.
+// Returns the certified PDF bytes.
+func (f *Forme) Certify(pdfBytes []byte, certificatePem, privateKeyPem string, opts CertifyOptions) ([]byte, error) {
 	body := map[string]string{
 		"pdf":            base64.StdEncoding.EncodeToString(pdfBytes),
 		"certificatePem": certificatePem,
@@ -111,11 +111,16 @@ func (f *Forme) Sign(pdfBytes []byte, certificatePem, privateKeyPem string, opts
 		body["contact"] = opts.Contact
 	}
 
-	respBody, _, err := f.doJSON("POST", "/v1/sign", body)
+	respBody, _, err := f.doJSON("POST", "/v1/certify", body)
 	if err != nil {
 		return nil, err
 	}
 	return respBody, nil
+}
+
+// Sign is deprecated. Use Certify instead.
+func (f *Forme) Sign(pdfBytes []byte, certificatePem, privateKeyPem string, opts CertifyOptions) ([]byte, error) {
+	return f.Certify(pdfBytes, certificatePem, privateKeyPem, opts)
 }
 
 // Merge combines multiple PDFs into a single PDF via multipart upload.

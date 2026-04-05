@@ -110,6 +110,8 @@ client := forme.New(apiKey string, opts ...forme.Option)
 | `RenderAsync(slug, data, asyncOpts)` | Start async render job | `(*AsyncResult, error)` |
 | `GetJob(jobID)` | Poll async job status | `(*JobResult, error)` |
 | `Merge(pdfs)` | Merge multiple PDFs | `([]byte, error)` |
+| `Certify(pdfBytes, certPem, keyPem, opts)` | Certify a PDF with X.509 certificate | `([]byte, error)` |
+| `Redact(pdfBytes, opts)` | Redact regions/patterns from a PDF | `([]byte, error)` |
 | `Extract(pdfBytes)` | Extract embedded data | `(map[string]any, error)` |
 
 ### Error Handling

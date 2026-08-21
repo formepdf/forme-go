@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+# forme-go/ sits as a sibling of forme/. Override with FORME_ROOT=... for
+# non-standard layouts.
+REPO_ROOT="${FORME_ROOT:-$(cd "$SCRIPT_DIR/../../forme" && pwd)}"
 
 echo "Building Forme WASM (wasm32-wasip1, release)..."
 cargo build \

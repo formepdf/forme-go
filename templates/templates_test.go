@@ -64,6 +64,16 @@ func TestDocumentTagged(t *testing.T) {
 	}
 }
 
+func TestDocumentEmbedStandardFonts(t *testing.T) {
+	if _, ok := Document(Page(Text("Hello"))).toDict()["embedStandardFonts"]; ok {
+		t.Fatal("expected no embedStandardFonts key by default")
+	}
+	d := Document(Page(Text("Hello"))).EmbedStandardFonts().toDict()
+	if d["embedStandardFonts"] != true {
+		t.Fatal("expected embedStandardFonts=true")
+	}
+}
+
 func TestDocumentNoMetadataWhenEmpty(t *testing.T) {
 	doc := Document(Page(Text("Hello")))
 	d := doc.toDict()

@@ -872,6 +872,7 @@ type DocumentNode struct {
 	tagged       bool
 	pdfa         string
 	pdfUa        bool
+	embedStandardFonts bool
 	flattenForms bool
 	certification map[string]any
 }
@@ -890,6 +891,12 @@ func (d *DocumentNode) Fonts(fonts []map[string]any) *DocumentNode { d.fonts = f
 func (d *DocumentNode) Tagged(tagged bool) *DocumentNode       { d.tagged = tagged; return d }
 func (d *DocumentNode) PdfA(level string) *DocumentNode        { d.pdfa = level; return d }
 func (d *DocumentNode) PdfUA() *DocumentNode                   { d.pdfUa = true; return d }
+
+// EmbedStandardFonts embeds Helvetica, Times and Courier as their
+// metric-compatible substitutes (register the fonts-standard TTFs via Fonts)
+// without claiming PDF/UA or PDF/A, so the PDF looks the same in every
+// viewer. The substitutes are subset; layout does not change.
+func (d *DocumentNode) EmbedStandardFonts() *DocumentNode { d.embedStandardFonts = true; return d }
 func (d *DocumentNode) FlattenForms() *DocumentNode            { d.flattenForms = true; return d }
 func (d *DocumentNode) SetCertification(config map[string]any) *DocumentNode {
 	d.certification = config
@@ -932,6 +939,9 @@ func (d *DocumentNode) toDict() map[string]any {
 	}
 	if d.pdfUa {
 		doc["pdfUa"] = true
+	}
+	if d.embedStandardFonts {
+		doc["embedStandardFonts"] = true
 	}
 	if d.certification != nil {
 		doc["certification"] = d.certification
